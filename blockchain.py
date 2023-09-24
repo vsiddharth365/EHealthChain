@@ -109,10 +109,10 @@ class Blockchain:
                 )  # create new block for this transaction
                 # Save the JSON data to a file
                 filename = "new_block.json"
-                with open(filename, "w") as json_file:
-                    json.dump(new_block.__dict__, json_file)
-                # Broadcast the block to all connected nodes
-                broadcast_block(filename)
+                with open(filename, "w") as file:
+                    json.dump(new_block.__dict__, file)
+                os.chmod(filename, 0o444)
+                broadcast_block(filename)  # Broadcast the block to all connected nodes
             except (OSError, Exception):
                 print("Error while creating the block.")
                 self.pending_transactions.pop(0)
@@ -149,7 +149,6 @@ class Blockchain:
             if accepted:  # if the block is valid
                 with open(file_path, "w") as file:  # create the block's file
                     json.dump(new_block.__dict__, file)
-                file.close()
             if node.resources > requiredComputationalResources[new_block.patient_id - 1]:  # if the node has more resources than required for validation of transaction of a patient
                 node.resources -= requiredComputationalResources[new_block.patient_id - 1]
             else:
@@ -173,6 +172,22 @@ class Blockchain:
         return blocks
 
 
+# function to make a directory deletable
+def make_all_deletable(directory):
+    try:
+        for root, dirs, files in os.walk(directory):
+            # Change permissions for directories
+            for dir_name in dirs:
+                dir_path = os.path.join(root, dir_name)
+                os.chmod(dir_path, 0o644)  # Allow read-write permissions for owner
+            # Change permissions for files
+            for file_name in files:
+                file_path = os.path.join(root, file_name)
+                os.chmod(file_path, 0o644)  # Allow read-write permissions for owner
+    except Exception as e:
+        print(f"An error occurred: {str(e)}")
+
+
 # function to re-initialize blockchain in case of system failure
 def reinitialize_blockchain(blockchain):
     if not os.path.exists("./blockchain/Node 1"):  # if the blockchain does not previously exist, no re-initializing is needed
@@ -187,7 +202,6 @@ def reinitialize_blockchain(blockchain):
                     block_data = json.load(file)  # load this block's data
                 except (json.decoder.JSONDecodeError, Exception):
                     block_data = {}
-            file.close()
             index = block_data["index"] if "index" in block_data else None  # get the index of the block
             timestamp = block_data["timestamp"] if "timestamp" in block_data else None  # get the timestamp of the block
             data = block_data["data"] if "data" in block_data else None  # get the patient's data stored in block
@@ -204,15 +218,18 @@ def reinitialize_blockchain(blockchain):
                 access_mapping_restored = json.load(file)  # load the mapping
             except (json.decoder.JSONDecodeError, Exception):
                 file.close()
+                print("Access mapping could not be restored.")
+                make_all_deletable("./blockchain")
                 shutil.rmtree("./blockchain")
                 return False
-        file.close()
         for patient_id, entity_ids in access_mapping_restored.items():  # restore the access mapping
             try:
                 patient_id = int(patient_id)
                 entity_ids = [int(entity_id) for entity_id in entity_ids]
                 blockchain.create_access_mapping(patient_id, entity_ids)  # create new mapping for each item in file
             except (ValueError, Exception):
+                print("Access mapping is corrupted.")
+                make_all_deletable("./blockchain")
                 shutil.rmtree("./blockchain")
                 return False
     return True  # return true to indicate that the blockchain is re-created
@@ -235,7 +252,6 @@ def check_blockchain_integrity(blockchain):
                         block_data = json.load(file)  # load the data of block
                     except (json.decoder.JSONDecodeError, Exception):
                         block_data = {}
-                file.close()
                 block_data = hashlib.sha256(str(block_data).encode()).hexdigest()  # create the hash of the data using SHA256 algorithm
                 extracted_data[block][node - 1] = block_data  # store the data of block with current node
                 block_counts[block_data] += 1  # increment the count of this block's data
@@ -274,6 +290,7 @@ def check_blockchain_integrity(blockchain):
             break
     if non_faulty_node == 0:  # if no non-faulty node is found
         print("All nodes have invalid blockchain.")
+        make_all_deletable("./blockchain")
         shutil.rmtree("./blockchain")
         return False
     else:
@@ -321,9 +338,11 @@ def encrypt_EHR(block_index, EHR):
     file_path = f"./blockchain/encrypted_keys/encrypted_private_key {block_index}.json"
     # Store the encrypted private key in a file
     os.makedirs("./blockchain/encrypted_keys/", exist_ok=True)
-    with open(file_path, "w") as json_file:
-        json.dump(data_to_store, json_file)
-        json_file.close()
+    if os.path.isfile(file_path):
+        os.chmod(file_path, 0o644)
+    with open(file_path, "w") as file:
+        json.dump(data_to_store, file)
+    os.chmod(file_path, 0o444)
     # Simulate encrypting data using the public key
     # OAEP = (Optimal Asymmetric Encryption Padding), MGF = (Mask Generation function)
     data_to_encrypt = EHR.encode("utf-8")
@@ -337,11 +356,10 @@ def decrypt_EHR(block_index, encrypted_data):
     # Read the encrypted private key from the file
     file_path = f"./blockchain/encrypted_keys/encrypted_private_key {block_index}.json"
     if os.path.exists(file_path):
-        with open(file_path, "r") as json_file:
-            data = json.load(json_file)
+        with open(file_path, "r") as file:
+            data = json.load(file)
             encrypted_private_key = base64.b64decode(data["encrypted_private_key"])
             fernet_key = base64.b64decode(data["fernet_key"])
-            json_file.close()
     else:
         raise Exception
     # Decrypt the encrypted private key using the Fernet key
@@ -403,9 +421,13 @@ def startBlockchain(data=None):
         blockchain.validate_pending_transactions()
         check_blockchain_integrity(blockchain)
 
+    if os.path.isfile("./blockchain/access_mapping.json"):
+        os.chmod("./blockchain/access_mapping.json", 0o644)
     with open("./blockchain/access_mapping.json", "w") as file:
         json.dump(blockchain.access_mapping, file)
-    file.close()
+    os.chmod("./blockchain/access_mapping.json", 0o444)
+    os.chmod("./blockchain/private_keys.json", 0o444)
+    os.chmod("./blockchain/public_keys.json", 0o444)
 
     for node in nodes:
         node.node_socket.close()
@@ -455,6 +477,7 @@ def broadcast_block(filename):
                 node.node_socket.send(file_data)
         except Exception as e:
             print(f"Error broadcasting JSON file to nodes: {str(e)}")
+    os.chmod(filename, 0o644)
     os.remove(filename)
 
 
@@ -474,13 +497,11 @@ def handle_node(node_socket):
                     public_keys_restored = json.load(file)
                 except (json.decoder.JSONDecodeError, Exception):
                     public_keys_restored = {}
-            file.close()
             with open("./blockchain/private_keys.json", "r") as file:
                 try:
                     private_keys_restored = json.load(file)
                 except (json.decoder.JSONDecodeError, Exception):
                     private_keys_restored = {}
-            file.close()
             if i + 1 in public_keys_restored and i + 1 in private_keys_restored:
                 public_key = public_keys_restored[i + 1]
                 private_key = private_keys_restored[i + 1]
@@ -510,11 +531,12 @@ def handle_node(node_socket):
         file_path = os.path.join(folder_path, "block 0.json")
         with open(file_path, "w") as file:
             json.dump(initial_block.__dict__, file)
-        file.close()
     if not re or flag == 1:
+        if os.path.isfile("./blockchain/public_keys.json"):
+            os.chmod("./blockchain/public_keys.json", 0o644)
         with open("./blockchain/public_keys.json", "w") as file:
             json.dump(node_public_key, file)
-        file.close()
+        if os.path.isfile("./blockchain/private_keys.json"):
+            os.chmod("./blockchain/private_keys.json", 0o644)
         with open("./blockchain/private_keys.json", "w") as file:
             json.dump(node_private_key, file)
-        file.close()
