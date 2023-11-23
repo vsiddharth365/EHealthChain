@@ -95,14 +95,24 @@ class Blockchain:
         while len(self.pending_transactions) > 0:
             previous_hash = self.get_last_K_blocks(1)[0].hash  # get the hash of previous block
             patient_id = self.pending_transactions[0][0]  # get the patient ID of patient whose transaction is pending
-            self.pending_transactions[0].pop(0)  # remove patient_id from the transaction
+            data, transaction_to_remove = [], []
+            # Extract the N* transactions of processed EHRs for the obtained patient ID. If there are less than N* such transactions, extract all
+            for pt in range(len(self.pending_transactions)):
+                if len(data) == acoBlockchainSolution[0]:
+                    break
+                if self.pending_transactions[pt][0] == patient_id:
+                    self.pending_transactions[pt].pop(0)
+                    data.append(self.pending_transactions[pt])
+                    transaction_to_remove.append(pt)    # list to store transactions to be completed
+            # Remove N* transactions with the obtained patient ID from the list of pending transactions
+            self.pending_transactions = [transaction for index, transaction in enumerate(self.pending_transactions) if index not in transaction_to_remove]
             lis = [ind + 1 for ind, value in enumerate(acoDataSolution[patient_id - 1]) if value == 1]  # get the index of edge server on which the data of patient with ID = 'patient_id' is uploaded
             transaction_initiator = f"Edge server: {lis}" if len(lis) > 0 else "Local device: "  # identify the source of processed EHR
             try:
                 new_block = Block(
                     len(self.chain),
                     datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    encrypt_EHR(len(self.chain), str(self.pending_transactions[0])),
+                    encrypt_EHR(len(self.chain), str(data)),
                     previous_hash,
                     patient_id,
                     transaction_initiator
@@ -115,7 +125,6 @@ class Blockchain:
                 broadcast_block(filename)  # Broadcast the block to all connected nodes
             except (OSError, Exception):
                 print("Error while creating the block.")
-                self.pending_transactions.pop(0)
                 return
             print("Awaiting validators' approval...")
             valid_block = True  # set this to true
@@ -136,7 +145,6 @@ class Blockchain:
                 broadcast_message("Block rejected by one or more validators.")
                 print("Block rejected by one or more validators.")  # display block rejection message
                 self.store_block(False, new_block)  # pass False to store_block function
-            self.pending_transactions.pop(0)  # remove this transaction from the list of pending transactions
 
     # function to store copy of block with each node
     def store_block(self, accepted, new_block):
@@ -326,7 +334,7 @@ def find_max_blocks_node():
 # function to encrypt the given EHR for a block
 def encrypt_EHR(block_index, EHR):
     # Generate RSA keys
-    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=8192)
     # Serialize private key to PEM (Privacy Enhanced Mail) format
     private_key_pem = private_key.private_bytes(encoding=serialization.Encoding.PEM, format=serialization.PrivateFormat.PKCS8, encryption_algorithm=serialization.NoEncryption())  # No encryption for now
     # Encrypt the private key using Fernet
@@ -334,7 +342,7 @@ def encrypt_EHR(block_index, EHR):
     cipher_suite = Fernet(encryption_key)
     encrypted_private_key = cipher_suite.encrypt(private_key_pem)
     # Store the encrypted private key and Fernet key in a JSON file
-    data_to_store = {"encrypted_private_key": base64.b64encode(encrypted_private_key).decode(), "fernet_key": base64.b64encode(encryption_key).decode()}
+    data_to_store = {"encrypted_private_key": base64.b64encode(encrypted_private_key).decode(), "key": base64.b64encode(encryption_key).decode()}
     file_path = f"./blockchain/encrypted_keys/encrypted_private_key {block_index}.json"
     # Store the encrypted private key in a file
     os.makedirs("./blockchain/encrypted_keys/", exist_ok=True)
@@ -359,7 +367,7 @@ def decrypt_EHR(block_index, encrypted_data):
         with open(file_path, "r") as file:
             data = json.load(file)
             encrypted_private_key = base64.b64decode(data["encrypted_private_key"])
-            fernet_key = base64.b64decode(data["fernet_key"])
+            fernet_key = base64.b64decode(data["key"])
     else:
         raise Exception
     # Decrypt the encrypted private key using the Fernet key
@@ -408,8 +416,9 @@ def startBlockchain(data=None):
                 break
         if transaction[0] == -1:
             break
-        entity_IDs = [int(x) for x in input(f"Enter the user IDs (space-separated) who can access patient {transaction[0]}'s data: ").split()]
-        blockchain.create_access_mapping(transaction[0], entity_IDs)
+        if transaction[0] not in blockchain.access_mapping:
+            entity_IDs = [int(x) for x in input(f"Enter the user IDs (space-separated) who can access patient {transaction[0]}'s data: ").split()]
+            blockchain.create_access_mapping(transaction[0], entity_IDs)
         if data is None:
             i = 0
             for s in df.iter_cols(2, df.max_column - 3):
@@ -418,6 +427,9 @@ def startBlockchain(data=None):
         else:
             transaction.append(data)
         blockchain.add_transaction(transaction)
+        choice_of_more_transactions = input("Want to add more transactions? (y/n): ")
+        if str(choice_of_more_transactions).lower() == "y":
+            continue
         blockchain.validate_pending_transactions()
         check_blockchain_integrity(blockchain)
 

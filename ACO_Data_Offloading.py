@@ -30,7 +30,10 @@ def aco(p, ant, fitness):
     global totalIteration
     iteration = 0  # set the iteration to 0
     maxIteration = 10000  # set the maximum iterations to 100
-    bestAnt = np.random.randint(0, len(fitness) - 1)  # assume one of the ants to be have the best fitness in the population
+    if len(fitness) > 1:
+        bestAnt = np.random.randint(0, len(fitness) - 1)  # assume one of the ants to be having the best fitness in the population
+    else:
+        bestAnt = 0
     taboo.append(bestAnt)  # append the index of selected best ant to the taboo table
     for a in range(len(fitness)):  # for each ant int population
         pheromone.append(fitness[a] / (sum(fitness) / len(fitness)))  # initialize its pheromone value as the ratio of its fitness to average fitness
