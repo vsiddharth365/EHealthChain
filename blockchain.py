@@ -103,7 +103,7 @@ class Blockchain:
                 if self.pending_transactions[pt][0] == patient_id:
                     self.pending_transactions[pt].pop(0)
                     data.append(self.pending_transactions[pt])
-                    transaction_to_remove.append(pt)    # list to store transactions to be completed
+                    transaction_to_remove.append(pt)  # list to store transactions to be completed
             # Remove N* transactions with the obtained patient ID from the list of pending transactions
             self.pending_transactions = [transaction for index, transaction in enumerate(self.pending_transactions) if index not in transaction_to_remove]
             lis = [ind + 1 for ind, value in enumerate(acoDataSolution[patient_id - 1]) if value == 1]  # get the index of edge server on which the data of patient with ID = 'patient_id' is uploaded

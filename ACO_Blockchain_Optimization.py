@@ -89,6 +89,6 @@ def ACO_BlockchainOptimization():
     startTime = time.time()  # get the start time of the algorithm
     ant = initializeBlockchainWhalePopulation()  # get the ant population, which is same as the whale population in NGS-WOA algorithm for blockchain optimization
     solution = aco(ant, calculateBlockchainWhaleFitness(ant))  # get the solution of ACO algorithm
-    endTime = time.time()   # get the end time of the algorithm
+    endTime = time.time()  # get the end time of the algorithm
     print("\nTime taken to obtain blockchain optimization solution in ACO: ", endTime - startTime)
     print(f"The optimal number of transactions per block and validators are {solution[0]} and {solution[1]} respectively")
