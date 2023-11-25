@@ -8,7 +8,7 @@ folderPath = ""
 
 P, Q = 10, 8  # global variables for no. of patients and edge servers
 S = 6  # initialize the number of sensors
-compare = 1  # set this to 1 to compare performance of all algorithms
+compare = 0  # set this to 1 to compare performance of all algorithms
 patient = []  # list of patients 1, 2, 3, ..., P
 healthParams = ['Blood Glucose Level', 'Diastolic Blood Pressure', 'Systolic Blood Pressure', 'Heart Rate', 'Body Temperature',
                 'Blood O2 Saturation']  # health parameters recorded by each sensor
