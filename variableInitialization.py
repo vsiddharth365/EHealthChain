@@ -8,7 +8,7 @@ folderPath = ""
 
 P, Q = 10, 8  # global variables for no. of patients and edge servers
 S = 6  # initialize the number of sensors
-compare = 0  # set this to 1 to compare performance of all algorithms
+compare = 1  # set this to 1 to compare performance of all algorithms
 patient = []  # list of patients 1, 2, 3, ..., P
 healthParams = ['Blood Glucose Level', 'Diastolic Blood Pressure', 'Systolic Blood Pressure', 'Heart Rate', 'Body Temperature',
                 'Blood O2 Saturation']  # health parameters recorded by each sensor
@@ -43,8 +43,8 @@ totalProcessingTime = [0 for _ in range(P)]  # (1-x)*T_l + x*T_o
 totalEnergyConsumption = [0 for _ in range(P)]  # (1-x)*E_l + x*E_o
 totalMemoryUsage = [0 for _ in range(P)]  # (1-x)*M_l + x*M_o
 
-V_l = 5  # lower limit of number of validators
-V_u = 10  # upper limit of number of validators
+V_l = 10  # lower limit of number of validators
+V_u = 100  # upper limit of number of validators
 N_l = 10  # lower limit of number of transactions per block
 N_u = 50  # upper limit of number of transactions per block
 downlinkTransmissionRate = 1.2 * 1e6  # bits/sec
@@ -189,13 +189,13 @@ def calculateDataWhaleFitness(p, whale):
         f = 0  # helper variable to find fitness of whales for a patient 'p'
         penalty = 0  # helper variable to find penalty of whale solution for a patient 'p'
         xTo, xTl, xEo, xEl, xMo, xMl = 0, 0, 0, 0, 0, 0  # variables to find constraint-related mathematical terms
-        t = 0  # helper variables to find time, energy and memory consumed by given whale for patient 'p'
-        e = 0
-        m = 0
+        t = (1 - (1 in whale[w])) * localProcessingTime[p]  # helper variables to find time, energy and memory consumed by given whale for patient 'p'
+        e = (1 - (1 in whale[w])) * localProcessingEnergy[p]
+        m = (1 - (1 in whale[w])) * localProcessingMemory[p]
         for q in range(Q):  # for each edge server
-            t += (1 - (1 in whale[w])) * localProcessingTime[p] + whale[w][q] * offloadingTime[p][q]
-            e += (1 - (1 in whale[w])) * localProcessingEnergy[p] + whale[w][q] * offloadingEnergy[p][q]
-            m += (1 - (1 in whale[w])) * localProcessingMemory[p] + whale[w][q] * offloadingMemory[p]
+            t += whale[w][q] * offloadingTime[p][q]
+            e += whale[w][q] * offloadingEnergy[p][q]
+            m += whale[w][q] * offloadingMemory[p]
             if whale[w][q]:  # if offloading happens at edge server 'q' in whale 'w'
                 if transmissionRate[p][q] < minTransmissionRate:  # if the constraint on transmission rate is violated
                     penalty += mu * (minTransmissionRate - transmissionRate[p][q]) ** 2  # add to the penalty
@@ -264,7 +264,7 @@ def calculateBlockchainWhaleFitness(whale):
     return fitness
 
 
-# function to calculate blockchain utiltiy for given values of number of transactions per second (N), number of validators (V) and patient's index (p)
+# function to calculate blockchain utility for given values of number of transactions per second (N), number of validators (V) and patient's index (p)
 def calculateUtility(N, V, p):
     latency = (N * transactionSize[p]) / downlinkTransmissionRate + requiredComputationalResources[p] / min(resourcesWithValidator) + N * transactionSize[p] * V + \
               verificationFeedbackSize[p] / uplinkTransmissionRate  # get the latency involved in block addition
