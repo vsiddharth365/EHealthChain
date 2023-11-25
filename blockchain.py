@@ -24,12 +24,11 @@ blockchain = None
 
 # class to represent a block of blockchain
 class Block:
-    def __init__(self, index, timestamp, data, previous_hash, patient_id, transaction_initiator):
+    def __init__(self, index, timestamp, data, previous_hash, transaction_initiator):
         self.index = index
         self.timestamp = timestamp
         self.data = data
         self.previous_hash = previous_hash
-        self.patient_id = patient_id
         self.transaction_initiator = transaction_initiator
         self.hash = self.calculate_hash()
 
@@ -40,7 +39,6 @@ class Block:
                 + str(self.timestamp)
                 + str(self.data)
                 + str(self.previous_hash)
-                + str(self.patient_id)
                 + str(self.transaction_initiator)
         )
         return hashlib.sha256(hash_data.encode()).hexdigest()
@@ -65,7 +63,7 @@ class Blockchain:
 
     # function to create the starting block of blockchain
     def create_genesis_block(self):
-        genesis_block = Block(0, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "Genesis Block", "0", "", "Hospital")
+        genesis_block = Block(0, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "Genesis Block", "0", "Hospital")
         self.chain.append(genesis_block)
 
     # function to get the last block of blockchain
@@ -94,27 +92,38 @@ class Blockchain:
     def validate_pending_transactions(self):
         while len(self.pending_transactions) > 0:
             previous_hash = self.get_last_K_blocks(1)[0].hash  # get the hash of previous block
-            patient_id = self.pending_transactions[0][0]  # get the patient ID of patient whose transaction is pending
-            data, transaction_to_remove = [], []
+            data = []
+            fog_servers = set()
+            local_devices = set()
             # Extract the N* transactions of processed EHRs for the obtained patient ID. If there are less than N* such transactions, extract all
             for pt in range(len(self.pending_transactions)):
                 if len(data) == acoBlockchainSolution[0]:
                     break
-                if self.pending_transactions[pt][0] == patient_id:
-                    self.pending_transactions[pt].pop(0)
-                    data.append(self.pending_transactions[pt])
-                    transaction_to_remove.append(pt)  # list to store transactions to be completed
-            # Remove N* transactions with the obtained patient ID from the list of pending transactions
-            self.pending_transactions = [transaction for index, transaction in enumerate(self.pending_transactions) if index not in transaction_to_remove]
-            lis = [ind + 1 for ind, value in enumerate(acoDataSolution[patient_id - 1]) if value == 1]  # get the index of edge server on which the data of patient with ID = 'patient_id' is uploaded
-            transaction_initiator = f"Edge server: {lis}" if len(lis) > 0 else "Local device: "  # identify the source of processed EHR
+                data.append(self.pending_transactions[pt])
+                data[-1][1] = encrypt_EHR(len(self.chain), str(data[-1][1]), len(data) - 1)
+            # Remove the first N* transactions from the list of pending transactions
+            self.pending_transactions = self.pending_transactions[acoBlockchainSolution[0]:]
+            for row in range(len(data)):
+                offloaded = False
+                for col in range(len(acoDataSolution[data[row][0] - 1])):
+                    if acoDataSolution[data[row][0] - 1][col] == 1:
+                        fog_servers.add(col + 1)
+                        offloaded = True
+                if not offloaded:
+                    local_devices.add(data[row][0])
+            transaction_initiator = ""
+            if len(fog_servers) > 0:
+                transaction_initiator += f"Fog server(s): {', '.join(map(str, fog_servers))}"  # identify the source of processed EHR
+            if len(local_devices) > 0:
+                if transaction_initiator:
+                    transaction_initiator += "; "
+                transaction_initiator += f"Local device(s): {', '.join(map(str, local_devices))}"
             try:
                 new_block = Block(
                     len(self.chain),
                     datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    encrypt_EHR(len(self.chain), str(data)),
+                    data,
                     previous_hash,
-                    patient_id,
                     transaction_initiator
                 )  # create new block for this transaction
                 # Save the JSON data to a file
@@ -148,7 +157,7 @@ class Blockchain:
 
     # function to store copy of block with each node
     def store_block(self, accepted, new_block):
-        nodes_with_lack_of_resources = []
+        nodes_with_lack_of_resources = set()
         for node in nodes:
             folder_path = "./blockchain/{}".format(node.name)  # get the location of each node
             os.makedirs(folder_path, exist_ok=True)  # create the location of node if it does not exist
@@ -157,13 +166,14 @@ class Blockchain:
             if accepted:  # if the block is valid
                 with open(file_path, "w") as file:  # create the block's file
                     json.dump(new_block.__dict__, file)
-            if node.resources > requiredComputationalResources[new_block.patient_id - 1]:  # if the node has more resources than required for validation of transaction of a patient
-                node.resources -= requiredComputationalResources[new_block.patient_id - 1]
-            else:
-                nodes_with_lack_of_resources.append(node.name.split()[1])  # otherwise the node purchases the required resources from cloud/fog provider
-                node.resources = 0  # node's resources again become zero, since only the required amount of resources was purchased
+            for d in range(len(new_block.data)):
+                if node.resources > requiredComputationalResources[new_block.data[d][0] - 1]:  # if the node has more resources than required for validation of transactions of patients in a block
+                    node.resources -= requiredComputationalResources[new_block.data[d][0] - 1]
+                else:
+                    nodes_with_lack_of_resources.add(node.name.split()[1])  # otherwise the node purchases the required resources from cloud/fog provider
+                    node.resources = 0  # node's resources will again become zero, since only the required amount of resources was purchased
         if len(nodes_with_lack_of_resources) > 0:
-            print("Nodes", ", ".join(nodes_with_lack_of_resources), "purchase more resources from CFP.")
+            print("Node(s)", ", ".join(nodes_with_lack_of_resources), "purchase more resources from CFP.")
 
     # function to check the validity of data access of a patient with ID = 'patient_id' by a user with ID = 'entity_id'
     def check_access(self, patient_id, entity_id):
@@ -173,10 +183,11 @@ class Blockchain:
 
     # function to fetch the block with a particular patient's ID from the blockchain
     def get_blocks_by_patient_id(self, patient_id):
-        blocks = []
+        blocks = set()
         for block in self.chain:  # for each block in chain
-            if block.patient_id == patient_id:  # if a match of patient_id is found
-                blocks.append(block)
+            for d in range(len(block.data)):
+                if block.data[d][0] == patient_id:  # if a match of patient_id is found
+                    blocks.add(block)
         return blocks
 
 
@@ -214,10 +225,9 @@ def reinitialize_blockchain(blockchain):
             timestamp = block_data["timestamp"] if "timestamp" in block_data else None  # get the timestamp of the block
             data = block_data["data"] if "data" in block_data else None  # get the patient's data stored in block
             previous_hash = block_data["previous_hash"] if "previous_hash" in block_data else None  # get the previous hash value of the block
-            patient_id = block_data["patient_id"] if "patient_id" in block_data else None  # get the patient_id
             transaction_initiator = block_data["transaction_initiator"] if "transaction_initiator" in block_data else None  # get the transaction initiator
             hash = block_data["hash"] if "hash" in block_data else None  # get the hash value of the block
-            new_block = Block(index, timestamp, data, previous_hash, patient_id, transaction_initiator)  # create the block
+            new_block = Block(index, timestamp, data, previous_hash, transaction_initiator)  # create the block
             new_block.hash = hash  # set its hash value
             blockchain.add_block(new_block)  # add the block to blockchain
     if os.path.isfile("./blockchain/access_mapping.json"):  # if the file of access mapping is found
@@ -332,9 +342,9 @@ def find_max_blocks_node():
 
 
 # function to encrypt the given EHR for a block
-def encrypt_EHR(block_index, EHR):
+def encrypt_EHR(block_index, EHR, data_index):
     # Generate RSA keys
-    private_key = rsa.generate_private_key(public_exponent=65537, key_size=8192)
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     # Serialize private key to PEM (Privacy Enhanced Mail) format
     private_key_pem = private_key.private_bytes(encoding=serialization.Encoding.PEM, format=serialization.PrivateFormat.PKCS8, encryption_algorithm=serialization.NoEncryption())  # No encryption for now
     # Encrypt the private key using Fernet
@@ -342,14 +352,20 @@ def encrypt_EHR(block_index, EHR):
     cipher_suite = Fernet(encryption_key)
     encrypted_private_key = cipher_suite.encrypt(private_key_pem)
     # Store the encrypted private key and Fernet key in a JSON file
-    data_to_store = {"encrypted_private_key": base64.b64encode(encrypted_private_key).decode(), "key": base64.b64encode(encryption_key).decode()}
+    data_to_store = {f"encrypted_private_key_{data_index}": base64.b64encode(encrypted_private_key).decode(), f"key_{data_index}": base64.b64encode(encryption_key).decode()}
     file_path = f"./blockchain/encrypted_keys/encrypted_private_key {block_index}.json"
     # Store the encrypted private key in a file
     os.makedirs("./blockchain/encrypted_keys/", exist_ok=True)
     if os.path.isfile(file_path):
         os.chmod(file_path, 0o644)
+    try:
+        with open(file_path, "r") as file:
+            existing_data = json.load(file)
+    except FileNotFoundError:
+        existing_data = {}
+    existing_data.update(data_to_store)  # append to existing data
     with open(file_path, "w") as file:
-        json.dump(data_to_store, file)
+        json.dump(existing_data, file)  # write the updated data back to the file
     os.chmod(file_path, 0o444)
     # Simulate encrypting data using the public key
     # OAEP = (Optimal Asymmetric Encryption Padding), MGF = (Mask Generation function)
@@ -360,14 +376,14 @@ def encrypt_EHR(block_index, EHR):
 
 
 # function to decrypt the encrypted EHR for a block
-def decrypt_EHR(block_index, encrypted_data):
+def decrypt_EHR(block_index, encrypted_data, data_index):
     # Read the encrypted private key from the file
     file_path = f"./blockchain/encrypted_keys/encrypted_private_key {block_index}.json"
     if os.path.exists(file_path):
         with open(file_path, "r") as file:
             data = json.load(file)
-            encrypted_private_key = base64.b64decode(data["encrypted_private_key"])
-            fernet_key = base64.b64decode(data["key"])
+            encrypted_private_key = base64.b64decode(data[f"encrypted_private_key_{data_index}"])
+            fernet_key = base64.b64decode(data[f"key_{data_index}"])
     else:
         raise Exception
     # Decrypt the encrypted private key using the Fernet key
@@ -421,9 +437,11 @@ def startBlockchain(data=None):
             blockchain.create_access_mapping(transaction[0], entity_IDs)
         if data is None:
             i = 0
+            trxn = []
             for s in df.iter_cols(2, df.max_column - 3):
-                transaction.append(healthParams[i] + ": " + str(s[transaction[0] + 2].value))
+                trxn.append(healthParams[i] + ": " + str(s[transaction[0] + 2].value))
                 i += 1
+            transaction.append(trxn)
         else:
             transaction.append(data)
         blockchain.add_transaction(transaction)
@@ -458,14 +476,18 @@ def startBlockchain(data=None):
         entity_id = int(input("Enter the user ID: "))
 
         if blockchain.check_access(patient_id, entity_id):
-            blocks = blockchain.get_blocks_by_patient_id(patient_id)
+            blocks = sorted(blockchain.get_blocks_by_patient_id(patient_id), key=lambda x: x.index)
+            print("Access granted.")
             if len(blocks) > 0:
                 for block in blocks:
                     try:
-                        EHR = decrypt_EHR(block.index, str(block.data))
-                        print("Access granted. Data in block {}:\n{}\nTimestamp: {}".format(block.index, EHR, block.timestamp))
+                        print("Data in block {}:\nTimestamp: {}\n".format(block.index, block.timestamp))
+                        for d in range(len(block.data)):
+                            if block.data[d][0] == patient_id:
+                                EHR = decrypt_EHR(block.index, str(block.data[d][1]), d)
+                                print(EHR, end="\n")
                     except (FileNotFoundError, Exception):
-                        print(f"Error retrieving data for patient {patient_id} at timestamp {block.timestamp}")
+                        print(f"Error retrieving data for patient ID {patient_id} in block {block.index} at timestamp {block.timestamp}")
             else:
                 print(f"No block found for the patient ID {patient_id}.")
         else:
