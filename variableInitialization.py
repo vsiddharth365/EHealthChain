@@ -269,7 +269,7 @@ def calculateUtility(N, V, p):
     latency = (N * transactionSize[p]) / downlinkTransmissionRate + requiredComputationalResources[p] / min(resourcesWithValidator) + N * transactionSize[p] * V + \
               verificationFeedbackSize[p] / uplinkTransmissionRate  # get the latency involved in block addition
     security = zeta * V ** it  # get the security level maintained while block validation
-    cost = sum(computationalCostIncurred[p]) / N  # get the cost incurred by validators for verifying block's data
+    cost = sum(computationalCostIncurred[p][:V]) / N  # get the cost incurred by validators for verifying block's data
     utility = (latency * criticality[p]) / maxBlockLatency + (maxSecurity * (criticality[p] ** 2)) / security + (cost * (criticality[p] ** 2)) / maxCost  # calculate utility
     return utility
 
