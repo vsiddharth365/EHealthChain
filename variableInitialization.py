@@ -266,7 +266,7 @@ def calculateBlockchainWhaleFitness(whale):
 
 # function to calculate blockchain utility for given values of number of transactions per second (N), number of validators (V) and patient's index (p)
 def calculateUtility(N, V, p):
-    latency = (N * transactionSize[p]) / downlinkTransmissionRate + requiredComputationalResources[p] / min(resourcesWithValidator) + N * transactionSize[p] * V + \
+    latency = (N * transactionSize[p]) / downlinkTransmissionRate + requiredComputationalResources[p] / min(resourcesWithValidator[:V]) + N * transactionSize[p] * V + \
               verificationFeedbackSize[p] / uplinkTransmissionRate  # get the latency involved in block addition
     security = zeta * V ** it  # get the security level maintained while block validation
     cost = sum(computationalCostIncurred[p][:V]) / N  # get the cost incurred by validators for verifying block's data
