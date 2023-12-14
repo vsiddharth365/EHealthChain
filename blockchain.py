@@ -130,7 +130,7 @@ class Blockchain:
                 filename = "new_block.json"
                 with open(filename, "w") as file:
                     json.dump(new_block.__dict__, file)
-                os.chmod(filename, 0o444)
+                os.chmod(filename, 0o000)
                 broadcast_block(filename)  # Broadcast the block to all connected nodes
             except (OSError, Exception):
                 print("Error while creating the block.")
@@ -198,11 +198,11 @@ def make_all_deletable(directory):
             # Change permissions for directories
             for dir_name in dirs:
                 dir_path = os.path.join(root, dir_name)
-                os.chmod(dir_path, 0o644)  # Allow read-write permissions for owner
+                os.chmod(dir_path, 0o200)  # Allow 'write' permission for owner
             # Change permissions for files
             for file_name in files:
                 file_path = os.path.join(root, file_name)
-                os.chmod(file_path, 0o644)  # Allow read-write permissions for owner
+                os.chmod(file_path, 0o200)  # Allow 'write' permission for owner
     except Exception as e:
         print(f"An error occurred: {str(e)}")
 
@@ -357,7 +357,7 @@ def encrypt_EHR(block_index, EHR, data_index):
     # Store the encrypted private key in a file
     os.makedirs("./blockchain/encrypted_keys/", exist_ok=True)
     if os.path.isfile(file_path):
-        os.chmod(file_path, 0o644)
+        os.chmod(file_path, 0o200)
     try:
         with open(file_path, "r") as file:
             existing_data = json.load(file)
@@ -366,7 +366,7 @@ def encrypt_EHR(block_index, EHR, data_index):
     existing_data.update(data_to_store)  # append to existing data
     with open(file_path, "w") as file:
         json.dump(existing_data, file)  # write the updated data back to the file
-    os.chmod(file_path, 0o444)
+    os.chmod(file_path, 0o000)
     # Simulate encrypting data using the public key
     # OAEP = (Optimal Asymmetric Encryption Padding), MGF = (Mask Generation function)
     data_to_encrypt = EHR.encode("utf-8")
@@ -452,12 +452,12 @@ def startBlockchain(data=None):
         check_blockchain_integrity(blockchain)
 
     if os.path.isfile("./blockchain/access_mapping.json"):
-        os.chmod("./blockchain/access_mapping.json", 0o644)
+        os.chmod("./blockchain/access_mapping.json", 0o200)
     with open("./blockchain/access_mapping.json", "w") as file:
         json.dump(blockchain.access_mapping, file)
-    os.chmod("./blockchain/access_mapping.json", 0o444)
-    os.chmod("./blockchain/private_keys.json", 0o444)
-    os.chmod("./blockchain/public_keys.json", 0o444)
+    os.chmod("./blockchain/access_mapping.json", 0o000)
+    os.chmod("./blockchain/private_keys.json", 0o000)
+    os.chmod("./blockchain/public_keys.json", 0o000)
 
     for node in nodes:
         node.node_socket.close()
@@ -511,7 +511,7 @@ def broadcast_block(filename):
                 node.node_socket.send(file_data)
         except Exception as e:
             print(f"Error broadcasting JSON file to nodes: {str(e)}")
-    os.chmod(filename, 0o644)
+    os.chmod(filename, 0o200)
     os.remove(filename)
 
 
@@ -567,10 +567,10 @@ def handle_node(node_socket):
             json.dump(initial_block.__dict__, file)
     if not re or flag == 1:
         if os.path.isfile("./blockchain/public_keys.json"):
-            os.chmod("./blockchain/public_keys.json", 0o644)
+            os.chmod("./blockchain/public_keys.json", 0o200)
         with open("./blockchain/public_keys.json", "w") as file:
             json.dump(node_public_key, file)
         if os.path.isfile("./blockchain/private_keys.json"):
-            os.chmod("./blockchain/private_keys.json", 0o644)
+            os.chmod("./blockchain/private_keys.json", 0o200)
         with open("./blockchain/private_keys.json", "w") as file:
             json.dump(node_private_key, file)
